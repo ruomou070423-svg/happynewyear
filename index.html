@@ -360,11 +360,12 @@ function initScene2() {
   handDown.style.left    = px(GW / 2 - hdW / 2);
   handDown.style.zIndex  = '5';
 
-  // polite — top right
+  // polite — top right, above both hands so patrol never covers it
   polite.style.width  = px(piW);
   polite.style.top    = px(GH * 0.02);
   polite.style.right  = px(GW * 0.02);
   polite.style.left   = '';
+  polite.style.zIndex = '6';
   polite.src          = 'Homework png/polite 0.png';
 
   const politeImgs = ['polite 0', 'polite 1', 'polite 2', 'polite 3'];
@@ -432,7 +433,7 @@ function initScene2() {
   function attack() {
     if (done) return;
 
-    const dashTop = GH * 0.75 - huH;   // envelope (image bottom) reaches player's hand
+    const dashTop = GH * 0.75 - huH + 10; // +10px so envelope visibly overlaps player's hand (guards against browser pixel-rounding shortfall)
     const restTop = GH * 0.5  - huH;   // envelope rests at 50% between attacks
     const is4th   = dodges >= 3;
 
