@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Happy New Year Game</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: #000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  touch-action: none;
+}
+
+#gameContainer {
+  position: relative;
+  background: radial-gradient(ellipse at center, #2a0a0a 0%, #0d0000 100%);
+  overflow: hidden;
+}
+
+.scene {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  display: none;
+}
+
+.scene.active { display: block; }
+
+#fadeOverlay {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: #000;
+  opacity: 1;
+  z-index: 9999;
+  transition: opacity 0.8s ease-in-out;
+  pointer-events: none;
+}
+
+#fadeOverlay.blocking { pointer-events: all; }
+
+img {
+  position: absolute;
+  user-select: none;
+  -webkit-user-drag: none;
+  pointer-events: none;
+  display: block;
+}
+
+/* ---- Scene 1 animations ---- */
+@keyframes shake {
+  0%   { transform: rotate(0deg); }
+  20%  { transform: rotate(5deg); }
+  40%  { transform: rotate(-5deg); }
+  60%  { transform: rotate(5deg); }
+  80%  { transform: rotate(-5deg); }
+  100% { transform: rotate(0deg); }
+}
+.shaking { animation: shake 0.25s ease-in-out infinite; }
+
+/* ---- Scene 3 animations ---- */
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-10px); }
+}
+.floating { animation: float 2s ease-in-out infinite; }
+
+/* ---- Scene 2 hint ---- */
+#s2hint {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: 'Arial Black', Arial, sans-serif;
+  font-size: 2.5vw;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-shadow: 0 2px 8px rgba(0,0,0,0.7);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s ease-in-out, color 0.3s ease-in-out;
+  z-index: 10;
+}
+
+/* ---- Scene 4 animations ---- */
+@keyframes bounceIn {
+  0%   { transform: translate(-50%, -50%) scale(0.6); }
+  55%  { transform: translate(-50%, -50%) scale(1.12); }
+  75%  { transform: translate(-50%, -50%) scale(0.95); }
+  90%  { transform: translate(-50%, -50%) scale(1.04); }
+  100% { transform: translate(-50%, -50%) scale(1.0); }
+}
+.bounceIn { animation: bounceIn 1.1s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+
+@keyframes particleFall {
+  0%   { transform: translateY(-30px) rotate(0deg);   opacity: 1; }
+  100% { transform: translateY(110vh) rotate(540deg); opacity: 0.6; }
+}
+</style>
+</head>
+<body>
+
+<div id="gameContainer">
+  <div id="fadeOverlay" class="blocking"></div>
+
+  <!-- Scene 1: Light the Firecrackers -->
+  <div class="scene active" id="scene1">
+    <img id="fc"    src="Homework png/firecrackers.png" alt="firecrackers">
+    <img id="match" src="Homework png/match.png"        alt="match">
+  </div>
+
+  <!-- Scene 2: Red Envelope Catching -->
+  <div class="scene" id="scene2">
+    <img id="handUp"   src="Homework png/hand(up).png"   alt="hand up">
+    <img id="handDown" src="Homework png/hand(down).png" alt="hand down">
+    <img id="polite"   src="Homework png/polite 0.png"   alt="polite">
+    <div id="s2hint"></div>
+  </div>
+
+  <!-- Scene 3: Dumpling Making -->
+  <div class="scene" id="scene3">
+    <img id="bowl"    src="Homework png/bowl.png"    alt="bowl">
+    <img id="filling" src="Homework png/filling.png" alt="filling">
+    <img id="crust"   src="Homework png/crust.png"   alt="crust">
+  </div>
+
+  <!-- Scene 4: Ending -->
+  <div class="scene" id="scene4">
+    <img id="hny" src="Homework png/happy new year.png" alt="happy new year">
+    <div id="particles"></div>
+  </div>
+</div>
+
+<script>
+/* =====================================================================
+   GLOBAL SETUP
+   ===================================================================== */
+
+const gc = document.getElementById('gameContainer');
+const overlay = document.getElementById('fadeOverlay');
+let GW = 0, GH = 0;
+
+function resize() {
+  const vw = window.innerWidth, vh = window.innerHeight;
+  if (vw / vh > 16 / 9) { GH = vh; GW = vh * 16 / 9; }
+  else                   { GW = vw; GH = vw * 9 / 16; }
+  gc.style.width  = GW + 'px';
+  gc.style.height = GH + 'px';
+}
+resize();
+window.addEventListener('resize', resize);
+
+function px(v) { return v + 'px'; }
+
+/* =====================================================================
+   FADE HELPERS
+   ===================================================================== */
+
+function fadeToBlack(cb) {
+  overlay.classList.add('blocking');
+  overlay.style.transition = 'opacity 0.8s ease-in-out';
+  overlay.style.opacity = '1';
+  setTimeout(cb, 820);
+}
+
+function fadeFromBlack(cb) {
+  overlay.style.transition = 'opacity 0.8s ease-in-out';
+  overlay.style.opacity = '0';
+  setTimeout(() => {
+    overlay.classList.remove('blocking');
+    if (cb) cb();
+  }, 820);
+}
+
+function switchScene(fromId, toId, initFn) {
+  fadeToBlack(() => {
+    document.getElementById(fromId).classList.remove('active');
+    document.getElementById(toId).classList.add('active');
+    initFn();
+    fadeFromBlack(null);
+  });
+}
+
+/* =====================================================================
+   COLLISION DETECTION
+   ===================================================================== */
+
+function overlaps(a, b) {
+  const ra = a.getBoundingClientRect();
+  const rb = b.getBoundingClientRect();
+  return !(ra.right < rb.left || ra.left > rb.right ||
+           ra.bottom < rb.top || ra.top > rb.bottom);
+}
+
+/* =====================================================================
+   DRAG HELPER — creates unified mouse + touch drag for one element
+   Returns a cleanup function to remove listeners.
+   onMove(gcX, gcY) called each frame; onEnd() called on release.
+   ===================================================================== */
+
+function makeDraggable(el, onStart, onMove, onEnd) {
+  function getGCPos(clientX, clientY) {
+    const r = gc.getBoundingClientRect();
+    return { x: clientX - r.left, y: clientY - r.top };
+  }
+
+  function down(clientX, clientY) {
+    const p = getGCPos(clientX, clientY);
+    onStart(p.x, p.y);
+  }
+  function move(clientX, clientY) {
+    const p = getGCPos(clientX, clientY);
+    onMove(p.x, p.y);
+  }
+
+  function onMouseDown(e) { e.preventDefault(); down(e.clientX, e.clientY); }
+  function onMouseMove(e) { move(e.clientX, e.clientY); }
+  function onMouseUp()    { onEnd(); }
+
+  function onTouchStart(e) { e.preventDefault(); down(e.touches[0].clientX, e.touches[0].clientY); }
+  function onTouchMove(e)  { e.preventDefault(); move(e.touches[0].clientX, e.touches[0].clientY); }
+  function onTouchEnd()    { onEnd(); }
+
+  el.addEventListener('mousedown',  onMouseDown);
+  el.addEventListener('touchstart', onTouchStart, { passive: false });
+  document.addEventListener('mousemove',  onMouseMove);
+  document.addEventListener('mouseup',    onMouseUp);
+  document.addEventListener('touchmove',  onTouchMove, { passive: false });
+  document.addEventListener('touchend',   onTouchEnd);
+
+  return function cleanup() {
+    el.removeEventListener('mousedown',  onMouseDown);
+    el.removeEventListener('touchstart', onTouchStart);
+    document.removeEventListener('mousemove',  onMouseMove);
+    document.removeEventListener('mouseup',    onMouseUp);
+    document.removeEventListener('touchmove',  onTouchMove);
+    document.removeEventListener('touchend',   onTouchEnd);
+  };
+}
+
+/* =====================================================================
+   SCENE 1 — Light the Firecrackers
+   ===================================================================== */
+
+function initScene1() {
+  const fc    = document.getElementById('fc');
+  const match = document.getElementById('match');
+
+  // Reset state
+  fc.classList.remove('shaking');
+  fc.src = 'Homework png/firecrackers.png';
+  match.dataset.used = '';
+
+  // Sizes
+  const fcW = GW * 0.18;
+  const mW  = GW * 0.13;
+
+  // Firecrackers: start off-screen top, slide down
+  fc.style.width      = px(fcW);
+  fc.style.left       = px(GW / 2 - fcW / 2);
+  fc.style.top        = px(-fcW * 2.5);
+  fc.style.transition = 'none';
+  fc.style.transform  = '';
+
+  // Match: bottom-left, invisible
+  match.style.width      = px(mW);
+  match.style.left       = px(GW * 0.05);
+  match.style.top        = px(GH * 0.65);
+  match.style.opacity    = '0';
+  match.style.transition = 'opacity 0.8s ease-in-out';
+  match.style.cursor     = 'grab';
+  match.style.pointerEvents = 'auto';
+  match.style.zIndex     = '5';
+
+  // Animate firecrackers sliding down
+  setTimeout(() => {
+    fc.style.transition = 'top 1s ease-in-out';
+    fc.style.top = px(GH * 0.05);
+    // Fade in match after firecrackers arrive
+    setTimeout(() => { match.style.opacity = '1'; }, 700);
+  }, 400);
+
+  // ---- Drag logic ----
+  let isDragging = false;
+  let offX = 0, offY = 0;
+
+  const cleanup = makeDraggable(
+    match,
+    (gcX, gcY) => {
+      if (match.dataset.used) return;
+      isDragging = true;
+      const rect = match.getBoundingClientRect();
+      const gcr  = gc.getBoundingClientRect();
+      offX = gcX - (rect.left - gcr.left);
+      offY = gcY - (rect.top  - gcr.top);
+      match.style.transition = 'none';
+      match.style.cursor = 'grabbing';
+    },
+    (gcX, gcY) => {
+      if (!isDragging || match.dataset.used) return;
+      match.style.left = px(gcX - offX);
+      match.style.top  = px(gcY - offY);
+      if (overlaps(match, fc)) kindle();
+    },
+    () => { isDragging = false; match.style.cursor = 'grab'; }
+  );
+
+  function kindle() {
+    if (match.dataset.used) return;
+    match.dataset.used = '1';
+    isDragging = false;
+    cleanup();
+
+    match.style.pointerEvents = 'none';
+    match.style.transition = 'opacity 0.3s ease-in-out';
+    match.style.opacity = '0';
+
+    fc.src = 'Homework png/firecrackers(kindle).png';
+    fc.style.transition = 'none';
+    // Keep same position; add shake
+    fc.classList.add('shaking');
+
+    setTimeout(() => {
+      fc.classList.remove('shaking');
+      switchScene('scene1', 'scene2', initScene2);
+    }, 1500);
+  }
+}
+
+/* =====================================================================
+   SCENE 2 — Red Envelope Catching
+   ===================================================================== */
+
+function initScene2() {
+  const handUp   = document.getElementById('handUp');
+  const handDown = document.getElementById('handDown');
+  const polite   = document.getElementById('polite');
+
+  const huW = GW * 0.16;
+  const huH = huW * (600 / 338);      // hand(up).png rendered height (338×600)
+  const hdW = GW * 0.14;
+  const piW = GW * 0.09;
+
+  // handUp — anchor by bottom so the envelope (image bottom) rests at 50% height
+  handUp.style.width      = px(huW);
+  handUp.style.top        = px(GH * 0.5 - huH);
+  handUp.style.left       = px(GW / 2 - huW / 2);
+  handUp.style.transition = 'none';
+  handUp.style.zIndex     = '5';
+
+  // handDown — bottom center
+  handDown.style.width   = px(hdW);
+  handDown.style.top     = px(GH * 0.75);
+  handDown.style.left    = px(GW / 2 - hdW / 2);
+  handDown.style.zIndex  = '5';
+
+  // polite — top right, above both hands so patrol never covers it
+  polite.style.width  = px(piW);
+  polite.style.top    = px(GH * 0.02);
+  polite.style.right  = px(GW * 0.02);
+  polite.style.left   = '';
+  polite.style.zIndex = '6';
+  polite.src          = 'Homework png/polite 0.png';
+
+  const politeImgs = ['polite 0', 'polite 1', 'polite 2', 'polite 3'];
+  let dodges        = 0;
+  let done          = false;
+  let patrolPaused  = false;   // BUG-FIX: pause patrol during dash so hand goes straight down
+  let timers        = [];
+  let rafId         = null;
+
+  const hint = document.getElementById('s2hint');
+  hint.style.top     = px(GH * 0.45);
+  hint.style.opacity = '0';
+
+  function showHint(text, color) {
+    hint.textContent = text;
+    hint.style.color = color;
+    hint.style.opacity = '1';
+    clearTimeout(hint._hideTimer);
+    hint._hideTimer = setTimeout(() => { hint.style.opacity = '0'; }, 900);
+  }
+
+  // ---- Player tracking ----
+  let playerX = GW / 2 - hdW / 2;
+
+  function movePlayer(clientX) {
+    const gcr = gc.getBoundingClientRect();
+    let x = clientX - gcr.left - hdW / 2;
+    x = Math.max(0, Math.min(GW - hdW, x));
+    playerX = x;
+    handDown.style.left = px(x);
+  }
+
+  function onMM(e) { if (!done) movePlayer(e.clientX); }
+  function onTM(e) { e.preventDefault(); if (!done) movePlayer(e.touches[0].clientX); }
+  document.addEventListener('mousemove', onMM);
+  document.addEventListener('touchmove', onTM, { passive: false });
+
+  function cleanup() {
+    done = true;
+    timers.forEach(clearTimeout);
+    timers = [];
+    if (rafId) cancelAnimationFrame(rafId);
+    document.removeEventListener('mousemove', onMM);
+    document.removeEventListener('touchmove', onTM);
+  }
+
+  // ---- Patrol ----
+  let huX   = GW / 2 - huW / 2;
+  let huDir = 1;
+  const patrolSpd = GW * 0.0025;
+
+  function patrol() {
+    if (done) return;
+    // BUG-FIX: only update left position when not attacking
+    if (!patrolPaused) {
+      huX += huDir * patrolSpd;
+      if (huX <= 0)        { huX = 0;        huDir = 1; }
+      if (huX >= GW - huW) { huX = GW - huW; huDir = -1; }
+      handUp.style.left = px(huX);
+    }
+    rafId = requestAnimationFrame(patrol);
+  }
+
+  // ---- Attack ----
+  function attack() {
+    if (done) return;
+
+    const dashTop = GH * 0.75 - huH + 10; // +10px so envelope visibly overlaps player's hand (guards against browser pixel-rounding shortfall)
+    const restTop = GH * 0.5  - huH;   // envelope rests at 50% between attacks
+    const is4th   = dodges >= 3;
+
+    patrolPaused = true;    // freeze left position — dash goes straight down
+
+    if (is4th) {
+      showHint('CATCH IT!', '#ffe066');
+    }
+
+    handUp.style.transition = 'top 0.18s ease-in';
+    handUp.style.top = px(dashTop);
+
+    const t1 = setTimeout(() => {
+      if (done) return;
+      const hit = overlaps(handUp, handDown);
+
+      if (is4th) {
+        // 4th attack: must CATCH (collision = win)
+        cleanup();
+        handUp.style.transition = 'top 0.35s ease-out';
+        handUp.style.top = px(restTop);
+        if (hit) {
+          setTimeout(() => switchScene('scene2', 'scene3', initScene3), 400);
+        } else {
+          setTimeout(() => switchScene('scene2', 'scene2', initScene2), 400);
+        }
+      } else {
+        // First 3 attacks: must DODGE (no collision = good)
+        if (hit) {
+          cleanup();
+          setTimeout(() => switchScene('scene2', 'scene2', initScene2), 200);
+        } else {
+          // Dodged successfully — retract and resume patrol
+          dodges++;
+          polite.src = `Homework png/${politeImgs[Math.min(dodges, 3)]}.png`;
+          showHint('NICE DODGE!', '#88ff88');
+          handUp.style.transition = 'top 0.35s ease-out';
+          handUp.style.top = px(restTop);
+          // Resume patrol only after retract animation finishes
+          const t2 = setTimeout(() => {
+            patrolPaused = false;
+            if (!done) scheduleAttack();
+          }, 400);
+          timers.push(t2);
+        }
+      }
+    }, 200);
+    timers.push(t1);
+  }
+
+  function scheduleAttack() {
+    // Show "DODGE!" hint a bit before each of the first 3 attacks
+    const delay = 900 + Math.random() * 700;
+    if (dodges < 3) {
+      const warnAt = Math.max(0, delay - 400);
+      const tw = setTimeout(() => { if (!done) showHint('DODGE!', '#ff6666'); }, warnAt);
+      timers.push(tw);
+    } else {
+      const tw = setTimeout(() => { if (!done) showHint('CATCH IT!', '#ffe066'); }, Math.max(0, delay - 400));
+      timers.push(tw);
+    }
+    const t = setTimeout(() => { if (!done) attack(); }, delay);
+    timers.push(t);
+  }
+
+  // Start patrol after 2s, first attack after another second
+  const t0 = setTimeout(() => {
+    patrol();
+    const t1 = setTimeout(() => { if (!done) scheduleAttack(); }, 1000);
+    timers.push(t1);
+  }, 2000);
+  timers.push(t0);
+}
+
+/* =====================================================================
+   SCENE 3 — Dumpling Making
+   ===================================================================== */
+
+function initScene3() {
+  const bowl    = document.getElementById('bowl');
+  const filling = document.getElementById('filling');
+  const crust   = document.getElementById('crust');
+
+  // Bowl — bottom left, scale 1.2
+  const bW = GW * 0.22 * 1.2;
+  bowl.style.width  = px(bW);
+  bowl.style.left   = px(GW * 0.02);
+  bowl.style.top    = px(GH - bW * 0.8);
+  bowl.style.zIndex = '2';
+
+  // Filling — above bowl, floating
+  const fW = GW * 0.13;
+  filling.style.width         = px(fW);
+  filling.style.left          = px(GW * 0.12);
+  filling.style.top           = px(GH * 0.3);
+  filling.style.opacity       = '1';
+  filling.style.transition    = 'none';
+  filling.style.zIndex        = '6';
+  filling.style.pointerEvents = 'auto';
+  filling.style.cursor        = 'grab';
+  filling.classList.add('floating');
+
+  // Crust — center-right
+  const cW = GW * 0.2;
+  crust.style.width         = px(cW);
+  crust.style.left          = px(GW * 0.55);
+  crust.style.top           = px(GH * 0.3);
+  crust.style.zIndex        = '5';
+  crust.style.pointerEvents = 'none';
+  crust.src                 = 'Homework png/crust.png';
+
+  let step            = 0;   // 0=drag, 1=click1, 2=click2, 3=done
+  let fillingDropped  = false;
+  let isDragging      = false;
+  let offX = 0, offY = 0;
+  let cleanupDrag = null;
+
+  cleanupDrag = makeDraggable(
+    filling,
+    (gcX, gcY) => {
+      if (fillingDropped) return;
+      isDragging = true;
+      filling.classList.remove('floating');
+      filling.style.transform = 'none';
+      const rect = filling.getBoundingClientRect();
+      const gcr  = gc.getBoundingClientRect();
+      offX = gcX - (rect.left - gcr.left);
+      offY = gcY - (rect.top  - gcr.top);
+      filling.style.cursor = 'grabbing';
+    },
+    (gcX, gcY) => {
+      if (!isDragging || fillingDropped) return;
+      filling.style.left = px(gcX - offX);
+      filling.style.top  = px(gcY - offY);
+      if (overlaps(filling, crust)) dropFilling();
+    },
+    () => { isDragging = false; filling.style.cursor = 'grab'; }
+  );
+
+  function dropFilling() {
+    if (fillingDropped) return;
+    fillingDropped = true;
+    isDragging = false;
+    cleanupDrag();
+
+    filling.style.transition    = 'opacity 0.3s ease-in-out';
+    filling.style.opacity       = '0';
+    filling.style.pointerEvents = 'none';
+
+    crust.src                 = 'Homework png/crust 1.png';
+    crust.style.pointerEvents = 'auto';
+    crust.style.cursor        = 'pointer';
+    step = 1;
+  }
+
+  function onCrustClick() {
+    if (step === 1) {
+      crust.src = 'Homework png/crust 2.png';
+      step = 2;
+    } else if (step === 2) {
+      crust.src                 = 'Homework png/crust 3.png';
+      crust.style.pointerEvents = 'none';
+      step = 3;
+      setTimeout(() => switchScene('scene3', 'scene4', initScene4), 700);
+    }
+  }
+
+  crust.addEventListener('click', onCrustClick);
+  crust.addEventListener('touchend', e => { e.preventDefault(); onCrustClick(); }, { passive: false });
+}
+
+/* =====================================================================
+   SCENE 4 — Ending Screen
+   ===================================================================== */
+
+function initScene4() {
+  const hny       = document.getElementById('hny');
+  const particles = document.getElementById('particles');
+
+  // Full-screen centered image
+  const imgW = Math.min(GW * 0.82, GH * 0.82 * (800 / 600));
+  hny.style.width      = px(imgW);
+  hny.style.position   = 'absolute';
+  hny.style.top        = '50%';
+  hny.style.left       = '50%';
+  hny.style.transform  = 'translate(-50%, -50%) scale(0.6)';
+  hny.style.zIndex     = '5';
+  hny.classList.remove('bounceIn');
+
+  particles.innerHTML  = '';
+  particles.style.position = 'absolute';
+  particles.style.inset = '0';
+  particles.style.zIndex = '4';
+  particles.style.pointerEvents = 'none';
+  particles.style.overflow = 'hidden';
+
+  // Trigger bounce
+  setTimeout(() => hny.classList.add('bounceIn'), 120);
+
+  // Falling red-envelope particles
+  const colors = ['#e63946', '#c9184a', '#ff006e', '#f4a261', '#e9c46a', '#d62828'];
+
+  function spawnParticle() {
+    const el = document.createElement('div');
+    el.style.cssText = [
+      'position:absolute',
+      `width:${6 + Math.random() * 14}px`,
+      `height:${10 + Math.random() * 20}px`,
+      `background:${colors[Math.floor(Math.random() * colors.length)]}`,
+      `left:${Math.random() * 100}%`,
+      'top:-30px',
+      'border-radius:2px',
+      `animation:particleFall ${2 + Math.random() * 3}s linear forwards`,
+      `opacity:${0.7 + Math.random() * 0.3}`
+    ].join(';');
+    particles.appendChild(el);
+    setTimeout(() => el.remove(), 5500);
+  }
+
+  let count = 0;
+  const maxParticles = 80;
+  const interval = setInterval(() => {
+    spawnParticle();
+    count++;
+    if (count >= maxParticles) clearInterval(interval);
+  }, 180);
+}
+
+/* =====================================================================
+   BOOT
+   ===================================================================== */
+
+window.addEventListener('load', () => {
+  resize();
+  // Start faded to black, then reveal scene 1
+  overlay.style.transition = 'none';
+  overlay.style.opacity = '1';
+  overlay.classList.add('blocking');
+
+  setTimeout(() => {
+    initScene1();
+    fadeFromBlack(null);
+  }, 300);
+});
+</script>
+</body>
+</html>
