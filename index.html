@@ -343,12 +343,13 @@ function initScene2() {
   const polite   = document.getElementById('polite');
 
   const huW = GW * 0.16;
+  const huH = huW * (600 / 338);      // hand(up).png rendered height (338×600)
   const hdW = GW * 0.14;
   const piW = GW * 0.09;
 
-  // handUp — top center
+  // handUp — anchor by bottom so the envelope (image bottom) rests at 50% height
   handUp.style.width      = px(huW);
-  handUp.style.top        = px(GH * 0.02);
+  handUp.style.top        = px(GH * 0.5 - huH);
   handUp.style.left       = px(GW / 2 - huW / 2);
   handUp.style.transition = 'none';
   handUp.style.zIndex     = '5';
@@ -431,9 +432,8 @@ function initScene2() {
   function attack() {
     if (done) return;
 
-    // BUG-FIX: dashTop extended to GH*0.68 so handUp actually reaches handDown at GH*0.75
-    const dashTop = GH * 0.68;
-    const restTop = GH * 0.02;
+    const dashTop = GH * 0.75 - huH;   // envelope (image bottom) reaches player's hand
+    const restTop = GH * 0.5  - huH;   // envelope rests at 50% between attacks
     const is4th   = dodges >= 3;
 
     patrolPaused = true;    // freeze left position — dash goes straight down
@@ -613,7 +613,7 @@ function initScene4() {
   const particles = document.getElementById('particles');
 
   // Full-screen centered image
-  const imgW = Math.min(GW * 0.82, GH * 1.4);
+  const imgW = Math.min(GW * 0.82, GH * 0.82 * (800 / 600));
   hny.style.width      = px(imgW);
   hny.style.position   = 'absolute';
   hny.style.top        = '50%';
