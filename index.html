@@ -67,10 +67,26 @@ img {
 
 /* ---- Scene 3 animations ---- */
 @keyframes float {
-  0%, 100% { margin-top: 0; }
-  50%       { margin-top: -10px; }
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-10px); }
 }
 .floating { animation: float 2s ease-in-out infinite; }
+
+/* ---- Scene 2 hint ---- */
+#s2hint {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: 'Arial Black', Arial, sans-serif;
+  font-size: 2.5vw;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-shadow: 0 2px 8px rgba(0,0,0,0.7);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s ease-in-out, color 0.3s ease-in-out;
+  z-index: 10;
+}
 
 /* ---- Scene 4 animations ---- */
 @keyframes bounceIn {
@@ -104,6 +120,7 @@ img {
     <img id="handUp"   src="Homework png/hand(up).png"   alt="hand up">
     <img id="handDown" src="Homework png/hand(down).png" alt="hand down">
     <img id="polite"   src="Homework png/polite 0.png"   alt="polite">
+    <div id="s2hint"></div>
   </div>
 
   <!-- Scene 3: Dumpling Making -->
@@ -350,10 +367,23 @@ function initScene2() {
   polite.src          = 'Homework png/polite 0.png';
 
   const politeImgs = ['polite 0', 'polite 1', 'polite 2', 'polite 3'];
-  let dodges      = 0;       // successful dodges
-  let done        = false;
-  let timers      = [];
-  let rafId       = null;
+  let dodges        = 0;
+  let done          = false;
+  let patrolPaused  = false;   // BUG-FIX: pause patrol during dash so hand goes straight down
+  let timers        = [];
+  let rafId         = null;
+
+  const hint = document.getElementById('s2hint');
+  hint.style.top     = px(GH * 0.45);
+  hint.style.opacity = '0';
+
+  function showHint(text, color) {
+    hint.textContent = text;
+    hint.style.color = color;
+    hint.style.opacity = '1';
+    clearTimeout(hint._hideTimer);
+    hint._hideTimer = setTimeout(() => { hint.style.opacity = '0'; }, 900);
+  }
 
   // ---- Player tracking ----
   let playerX = GW / 2 - hdW / 2;
@@ -387,10 +417,13 @@ function initScene2() {
 
   function patrol() {
     if (done) return;
-    huX += huDir * patrolSpd;
-    if (huX <= 0)        { huX = 0;        huDir = 1; }
-    if (huX >= GW - huW) { huX = GW - huW; huDir = -1; }
-    handUp.style.left = px(huX);
+    // BUG-FIX: only update left position when not attacking
+    if (!patrolPaused) {
+      huX += huDir * patrolSpd;
+      if (huX <= 0)        { huX = 0;        huDir = 1; }
+      if (huX >= GW - huW) { huX = GW - huW; huDir = -1; }
+      handUp.style.left = px(huX);
+    }
     rafId = requestAnimationFrame(patrol);
   }
 
@@ -398,9 +431,16 @@ function initScene2() {
   function attack() {
     if (done) return;
 
-    const dashTop    = GH * 0.62;
-    const restTop    = GH * 0.02;
-    const is4th      = dodges >= 3;
+    // BUG-FIX: dashTop extended to GH*0.68 so handUp actually reaches handDown at GH*0.75
+    const dashTop = GH * 0.68;
+    const restTop = GH * 0.02;
+    const is4th   = dodges >= 3;
+
+    patrolPaused = true;    // freeze left position — dash goes straight down
+
+    if (is4th) {
+      showHint('CATCH IT!', '#ffe066');
+    }
 
     handUp.style.transition = 'top 0.18s ease-in';
     handUp.style.top = px(dashTop);
@@ -415,27 +455,27 @@ function initScene2() {
         handUp.style.transition = 'top 0.35s ease-out';
         handUp.style.top = px(restTop);
         if (hit) {
-          // Win → scene 3
           setTimeout(() => switchScene('scene2', 'scene3', initScene3), 400);
         } else {
-          // Missed catch → restart
           setTimeout(() => switchScene('scene2', 'scene2', initScene2), 400);
         }
       } else {
         // First 3 attacks: must DODGE (no collision = good)
         if (hit) {
-          // Got hit → restart
           cleanup();
           setTimeout(() => switchScene('scene2', 'scene2', initScene2), 200);
         } else {
-          // Dodged successfully
+          // Dodged successfully — retract and resume patrol
           dodges++;
           polite.src = `Homework png/${politeImgs[Math.min(dodges, 3)]}.png`;
+          showHint('NICE DODGE!', '#88ff88');
           handUp.style.transition = 'top 0.35s ease-out';
           handUp.style.top = px(restTop);
+          // Resume patrol only after retract animation finishes
           const t2 = setTimeout(() => {
+            patrolPaused = false;
             if (!done) scheduleAttack();
-          }, 1200);
+          }, 400);
           timers.push(t2);
         }
       }
@@ -444,7 +484,16 @@ function initScene2() {
   }
 
   function scheduleAttack() {
+    // Show "DODGE!" hint a bit before each of the first 3 attacks
     const delay = 900 + Math.random() * 700;
+    if (dodges < 3) {
+      const warnAt = Math.max(0, delay - 400);
+      const tw = setTimeout(() => { if (!done) showHint('DODGE!', '#ff6666'); }, warnAt);
+      timers.push(tw);
+    } else {
+      const tw = setTimeout(() => { if (!done) showHint('CATCH IT!', '#ffe066'); }, Math.max(0, delay - 400));
+      timers.push(tw);
+    }
     const t = setTimeout(() => { if (!done) attack(); }, delay);
     timers.push(t);
   }
@@ -507,6 +556,7 @@ function initScene3() {
       if (fillingDropped) return;
       isDragging = true;
       filling.classList.remove('floating');
+      filling.style.transform = 'none';
       const rect = filling.getBoundingClientRect();
       const gcr  = gc.getBoundingClientRect();
       offX = gcX - (rect.left - gcr.left);
